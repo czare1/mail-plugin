@@ -12,7 +12,9 @@ object Mail {
   def apply() = new Mail[UNSET, UNSET, UNSET, UNSET]()
   /** Allows mail instance with all required fields set to be sent */
   implicit def enableSending(mail: Mail[SET, SET, SET, SET]) = new {
-    def send() { MailActor.get ! toEmail }
+    def send() = {
+      MailPlugin.mailer.sendMail(toEmail)
+    }
     private def toEmail = {
       val e = new Email()
       mail.from.map { case (name, address) => e.setFromAddress(name, address) }
@@ -24,13 +26,13 @@ object Mail {
       mail.text.map(e.setText(_))
       mail.html.map(h => e.setTextHTML(h.toString()))
       mail.attachments.foreach { a =>
-        e.addAttachment(MimeUtility.encodeText(a.name), a.data.map(_.toByte).toArray, a.mimeType)
+        e.addAttachment(MimeUtility.encodeText(a.name), a.data, a.mimeType)
       }
       e
     }
   }
 
-  case class Attachment(name: String, data: Source, mimeType: String)
+  case class Attachment(name: String, data: Array[Byte], mimeType: String)
 
   abstract class Recipient {
     val name: String
@@ -50,8 +52,7 @@ object Mail {
 
 /** Mail instance builder
   *
-  * Utilizes statically typed builder pattern. Only instance with `from`, `to`, `subject`and `body`(either text or html)
-  * values set can be actually sent to [[mail.MailActor.MailActor]].
+  * Utilizes statically typed builder pattern. Only instance with `from`, `to`, `subject`and `body`(either text or html).
   */
 class Mail[FROM, TO, SUBJECT, BODY](val from: Option[(String, String)] = None, val subject: Option[String] = None,
                                     val recipients: List[Mail.Recipient] = List.empty, val text: Option[String] = None,
@@ -88,6 +89,6 @@ class Mail[FROM, TO, SUBJECT, BODY](val from: Option[(String, String)] = None, v
   def withAttachments(a_x: Attachment, a_xs: Attachment*) =
     new Mail[FROM, TO, SUBJECT, BODY](from, subject, recipients, text, html, a_x :: a_xs.toList)
   /** Returns new instance with attachment appended to attachments list */
-  def withAttachment(name: String, data: Source, mimeType: String) =
+  def withAttachment(name: String, data: Array[Byte], mimeType: String) =
     new Mail[FROM, TO, SUBJECT, BODY](from, subject, recipients, text, html, Attachment(name, data, mimeType) :: attachments)
 }
